@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../external/underscore-min.js"></script>
+<style>
+svg text {
+  alignment-baseline:central;
+  text-anchor:middle;
+}
+</style>
+
+<script src="planelib.js"></script>
+
+<script>
+// elaborate clock hand
+function clockhandpath(dna)
+{
+  // dna[0]==r
+  var p=[]
+  var a=(function(r,x,y){
+    return Math.acos((x*r-y*Math.sqrt(x*x+y*y-r*r))/(x*x+y*y))
+  })(dna[0],_.isArray(dna[1])?dna[1][0]:dna[1], _.isArray(dna[1])?dna[1][1]:0)
+  p.push($v.arcpath('M',{center:[0,0],r:dna[0],a1:2*Math.PI-a,a2:a}))
+  for(i=1; i<dna.length; ++i ) {
+    p.push('L',!_.isObject(dna[i])?[dna[i],0]:dna[i])
+  }
+  for(i=dna.length; --i; ) {
+    p.push('L',!_.isObject(dna[i])?[dna[i],0]:[dna[i][0],-dna[i][1]])
+  }
+  p.push('z')
+  return p
+}
+
+// oughtred stule rotating cursor, provides edge aligned with radius
+// r0 radius of a central disk (part of a disc, approx 3/4)
+// r1 raidus of an outer part
+//  ________
+// (  ._____\
+//  \_/ 
+function halfbladepath(r0,r1, len)
+{
+   var a=Math.acos((r0-r1)/len)
+   var p=[];
+   p.push(
+     $v.arcpath('M',{center:[0,0],r:r0,a1:0,a2:Math.PI*2-a}),
+     $v.arcpath('L',{center:[len,0],r:r1,a1:Math.PI*2-a,a2:Math.PI*2}),
+     'z'
+   )
+   return p;
+}
+
+// horizontal line aligned with required radius togather with teadrop shaped
+// transparency it is printed on
+function transparentcursor(r0,r1,len)
+{
+   // ASSERT r0>r1
+   var a=Math.acos((r0-r1)/len)
+   var b=Math.PI*2-a
+   var p=[];
+   p.push(
+     $v.arcpath('M',{center:[0,0],r:r0,a1:a,a2:b}),
+     $v.arcpath('L',{center:[len,0],r:r1,a1:-1,a2:a}),
+     'z',
+     'M',0,0,'L',len,0,'z'
+   )
+   return p;
+}
+
+function logclick(){
+  console.log('arrow click')
+}
+
+function get(values,to) {
+  if( _.isArray(values) ) {
+    if( to>=0 && to<values.length ) return values[to]
+    else return values[values.length-1]
+  } else return values // single values
+}
+
+function tickorder(counts,n)
+{
+  var o=0
+  while(1) {
+    if( o>=counts.length ) return o
+    if( n%counts[o]!=0 ) return o
+    n=n/counts[o];
+    ++o
+  }
+}
+
+// options:
+//   .tickh
+//   .tickw
+//   .tickf
+//   .segments [
+//     .vfrom // virtual from, where it starts count from
+//     .from  // where it attempts to place ticks from
+//     .to
+//     .step
+//     .group =[n1,n2,...]
+//   ]
+function svgdial(options)
+{
+  var tgrp=[] // ticks grouped by order
+  var lgrp=[] // labels grouped by order
+  // [0,60,1,[5]] // special case 
+}
+
+function clock(svg)
+{
+  var R=100
+  var BT=10,ST=3 // big tick, small tick
+  // var 
+  origin=$v(R+1,R+1)
+  var drawattrib={stroke:'black',fill:'none'}
+  var e=[$v('circle',_.extend({r:R},origin.rename('cx','cy'),drawattrib))];
+
+  // make tick as a line element
+  function ltick(a,r1,r2) {
+    return $v('line',_.extend(
+      $v(r1,0).rotate(a).add(origin).rename('x1','y1'),
+      $v(r2,0).rotate(a).add(origin).rename('x2','y2'),
+      drawattrib));
+  }
+
+  // make tick as a path
+  function ptick(a,r1,r2) {
+    var p1=$v(r1,0).rotate(a).add(origin);
+    var p2=$v(r2,0).rotate(a).add(origin);
+    return ['M',p1,'L',p2]
+  }
+  
+  var pathBT=[],pathST=[]
+  for( var i=0; i<60; ++i ) {
+    if( 0==i%5 ) {
+      // console.log('big tick',i)
+      //e.push( ltick((i/30)*Math.PI,R,R-BT) )
+      pathBT.push(ptick((i/30)*Math.PI,R,R-BT) )
+      e.push( $v('text',_.extend({},
+        $v(R-BT-10,0).rotate((i/30-0.5)*Math.PI).add(origin).rename('x','y')
+      ),((i/5)+11)%12+1) )
+      e.push( $v('circle',_.extend({r:2, stroke:'red',fill:'none'},
+        $v(R-BT-10,0).rotate((i/30-0.5)*Math.PI).add(origin).rename('cx','cy')
+      )))
+      e.pop();
+    } else {
+      // console.log('small tick',i)
+      pathST.push(ptick((i/30)*Math.PI,R,R-ST) )
+      // if( 0<ST ) e.push( ltick((i/30)*Math.PI,R,R-ST) )
+    }
+  }
+  e.push($v('path',_.extend({d:$v.string(pathBT)},drawattrib)))
+  e.push($v('path',_.extend({d:$v.string(pathST)},drawattrib)))
+  var hand1=$v('path',_.extend(
+    {id:'hourhand'
+    ,fill:'silver'
+    //,d:pathString(['M',-10,-10,'L',10,-10,'L',0,R-10,'z'])
+    //,d:$v.string(clockhandpath([7,[10,2],[35,8],R-50]))
+    ,d:$v.string(halfbladepath(15,10,R))
+    //,d:$v.string(transparentcursor(15,10,R)),fill:'rgba(0,0,0,0.03)'
+    ,stroke:'black'
+    ,transform:'rotate(0)'
+    }
+    ))
+  var hand2=$v('path',_.extend(
+    {id:'minutehand'
+    //,d:$v.string(clockhandpath([10,[10,2],[20,2],[R/2-15,4],R-30]))
+    ,d:$v.string(clockhandpath([10,[15,2],[R/2,4],R-11]))
+    ,stroke:'black'
+    ,transform:'rotate(45)'
+    ,fill:'rgba(0,0,0,0)'}
+    ))
+  var pa=null,hand=null
+  hand1.onmousedown=function(e){
+    hand=hand1
+    pa=$v(e.offsetX,e.offsetY).sub(origin).dir()
+  }
+  svg.onmouseup=function(e){
+    hand=null
+  }
+  svg.onmousemove=function(e){
+    if( null===hand ) return
+    var a=$v(e.offsetX,e.offsetY).sub(origin).dir();
+    var olda=parseFloat(hand1.getAttribute('transform').match(/rotate\((.*)\)/)[1])
+    // console.log(olda,a,pa)
+    
+    hand1.setAttribute('transform','rotate('+((olda+$v.dfr(a-pa))%360)+')')
+    pa=a
+    e.preventDefault()
+    e.stopPropagation()
+  }
+  setclock=function(hr,min){
+    var t=(hr+min/60)%12;
+    hand1.setAttribute('transform','rotate('+((t/12)*360)+')')
+    hand2.setAttribute('transform','rotate('+(((t)*360)%360)+')')
+  }
+  var g=$v('g',{transform:_.template('translate(<%=x%> <%=y%>)rotate(-90)',origin)},hand2,hand1)
+  e.push(g)
+  e.push($v('path',{'fill':'none',stroke:'silver',d:$v.string([
+    $v.arcpath('M',{center:origin,r:R/2,a1d:0,a2d:360}),
+    'Z'])}))
+  e.pop()
+  e.forEach(function(e){svg.appendChild(e)});
+  setTimeout(function(){
+    console.log('tick')
+    var d=new Date()
+    var t=[d.getHours(),d.getMinutes(),59000]
+    var int
+    if( t[0]==LASTTIME[0] && t[1]==LASTTIME[1] || LASTTIME[2]>1000) t[2]=100
+    LASTTIME=t
+    setclock(t[0],t[1])
+    setTimeout(arguments.callee,t[2])
+  },1000)
+  return svg;
+}
+var LASTTIME=[0,0,100]
+</script>
+</head>
+<body onload="clock(document.getElementById('C'))">
+<h3>SVG</h3>
+<svg width=202 height=202 id="C">
+</svg>
+<hr/>
+From file:
+<embed src="clockdial.svg" height=202></embed>
+<hr/>
+</body>
+</html>
+
+  e.push(esvg('path',{d:pathString(_.map(arcBezier({center:[R,R],r:R/2,a1d:0,a2d:135}),function(v,i){
+    var t=[]
+    if(0==i) t=['M',v[0]]
+    return t.concat(['C'],v.slice(1))
+  }))}))
+  e.pop()
+  e.forEach(function(e){svg.appendChild(e)});
+  setTimeout(function(){
+    console.log('tick')
+    var arrow=document.getElementById("arrow")
+    if( A<0 ) return;
+    A=(A+6)%360;
+    arrow.setAttribute('transform','rotate('+A+')')
+    setTimeout(arguments.callee,1000)
+  },1000)
+  return svg;
+}
+var A=-1
+</script>
+</head>
+<body onload="clock(document.getElementById('C'))">
+<svg width=200 height=200 id="C">
+</svg>
+</body>
+</html>
+
