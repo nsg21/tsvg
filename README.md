@@ -9,7 +9,7 @@ SVG's `<path>` element.
 Installation
 ------------
 
-`tsvg.js` depends on `underscore.js`. Use lines
+`tsvg.js` depends on `underscore.js`. Include lines
 
 ```javascript
 <script src="path_to_underscore/underscore-min.js"></script>
