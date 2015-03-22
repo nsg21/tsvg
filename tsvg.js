@@ -1,5 +1,8 @@
 (function(global,undefined){
-  // usually aliased as _v in global namespace
+  // usually aliased as $v in global namespace
+  // depending on parameters, either
+  // a) generates a 2d vector
+  // b) generates or updates SVG element
   function planeLib(a1,a2) {
     if(1==arguments.length ) {
       if( _.isArray(a1) && 2==a1.length) {
@@ -31,7 +34,8 @@
       if( _.isArray(arguments[i] ) ) {
         arguments.callee.apply(this,[tag,{}].concat(arguments[i]))
       } else if( !_.isObject(arguments[i])) {
-        tag.appendChild(document.createTextNode(arguments[i]))
+        if( !_.isUndefined(arguments[i]) )
+          tag.appendChild(document.createTextNode(arguments[i]))
       } else {
         tag.appendChild(arguments[i])
       }
@@ -176,30 +180,33 @@ function pathString(arr) {
     return path+((isdigitat(path,-1) && isdigitat(item,0))?' ':'')+item
   },'')
 }
-  planeLib.path=pathString
-  planeLib.string=pathString
-  planeLib.rfd=rfd
-  planeLib.dfr=dfr
-
-  planeLib.arcpath=function(initial,arcoptions) {
-    // join complete bezier segments possibly including intial element
-    var r=[]
-    var segments
-    var options
-    if( _.isString(initial) ) {
-      segments=arcBezier(arcoptions)
-      r.push(initial,segments[0][0])
-    } else if( _.isObject(initial) && 1==arguments.length ) {
-      segments=arcBezier(initial)
-    } else return;
-    _.each(segments,function(seg) {
-      r.push('C',seg.slice(1)) // full segment definition
-      // r.push('S',seg.slice(2)) // shortcut because symmetric, sometimes not right
-    })
-    return r
-  }
-
-
+  _.extend(planeLib,{
+    normalize:normalize
+    ,path:pathString
+    ,string:pathString
+    ,rfd:rfd
+    ,dfr:dfr
+    ,arcpath:function(initial,arcoptions) {
+      // join complete bezier segments possibly including intial element
+      var r=[]
+      var segments
+      var options
+      if( _.isString(initial) ) {
+        segments=arcBezier(arcoptions)
+        r.push(initial,segments[0][0])
+      } else if( _.isObject(initial) && 1==arguments.length ) {
+        segments=arcBezier(initial)
+      } else return;
+      _.each(segments,function(seg) {
+        r.push('C',seg.slice(1)) // full segment definition
+        // r.push('S',seg.slice(2)) // shortcut because symmetric, sometimes not right
+      })
+      return r
+    }
+    ,polar:function(r,phi) {
+      return new Vector2D(r*Math.cos(phi),r*Math.sin(phi))
+    }
+  })
   global.planeLib=planeLib
   global.$v=planeLib
 })(this)
