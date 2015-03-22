@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<script src="../external/underscore-min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.2/underscore-min.js"></script>
 <style>
 svg text {
   alignment-baseline:central;
@@ -9,7 +9,7 @@ svg text {
 }
 </style>
 
-<script src="planelib.js"></script>
+<script src="tsvg.js"></script>
 
 <script>
 // elaborate clock hand
@@ -194,7 +194,7 @@ function clock(svg)
     hand1.setAttribute('transform','rotate('+((t/12)*360)+')')
     hand2.setAttribute('transform','rotate('+(((t)*360)%360)+')')
   }
-  var g=$v('g',{transform:_.template('translate(<%=x%> <%=y%>)rotate(-90)',origin)},hand2,hand1)
+  var g=$v('g',{transform:_.template('translate(<%=x%> <%=y%>)rotate(-90)')(origin)},hand2,hand1)
   e.push(g)
   e.push($v('path',{'fill':'none',stroke:'silver',d:$v.string([
     $v.arcpath('M',{center:origin,r:R/2,a1d:0,a2d:360}),
