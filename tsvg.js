@@ -3,6 +3,7 @@
   // depending on parameters, either
   // a) generates a 2d vector
   // b) generates or updates SVG element
+  var XLINKNS="http://www.w3.org/1999/xlink"
   function planeLib(a1,a2) {
     if(1==arguments.length ) {
       if( _.isArray(a1) && 2==a1.length) {
@@ -19,7 +20,7 @@
     if( _.isString(a1) ) {
       tag=document.createElementNS('http://www.w3.org/2000/svg',a1);
       if( 'svg'===a1 ) {
-        tag.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
+        tag.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINKNS);
       }
     } else if( _.isObject(a1) ) {
       tag=a1
@@ -27,7 +28,8 @@
     // fill attributes
     _.each(a2,function(v,k){
       //console.log('k=',k,'v=',v)
-      tag.setAttribute(k,v)
+      if('href'==k) tag.setAttributeNS(XLINKNS, "href", v);
+      else tag.setAttribute(k,v)
     })
     for( var i=2; i<arguments.length; ++i ) {
       // console.log(i,'-th:',typeof(arguments[i]))
