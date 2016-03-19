@@ -29,6 +29,7 @@
     _.each(a2,function(v,k){
       //console.log('k=',k,'v=',v)
       if('href'==k) tag.setAttributeNS(XLINKNS, "href", v);
+      else if( 'xlink:'==k.substr(0,6) ) tag.setAttributeNS(XLINKNS, k.substr(6), v);
       else tag.setAttribute(k,v)
     })
     for( var i=2; i<arguments.length; ++i ) {
@@ -65,7 +66,10 @@ function Vector2D(x,y)
   }
 }
 
-function normalize(f)
+// f is a function which takes Vector2D argument
+// this operator converts 1 object, 1 array or 2 numbers to Vector2D and passes
+// it onto f
+function acceptsvector(f)
 {
   return function(arg,argopt) {
   if( 1==arguments.length ) {
@@ -77,13 +81,14 @@ function normalize(f)
   }
 }
 
-function dfr(rad){return rad*180/Math.PI}
-function rfd(deg){return deg*Math.PI/180}
+var RFD=180/Math.PI;
+function dfr(rad){return rad*RFD}
+function rfd(deg){return deg/RFD}
 
 _.extend(Vector2D.prototype,{
-  add:normalize(function(v){return new Vector2D(this.x+v.x,this.y+v.y)}),
-  sub:normalize(function(v){return new Vector2D(this.x-v.x,this.y-v.y)}),
-  dot:normalize(function(v){return this.x*v.x+this.y*v.y}),
+  add:acceptsvector(function(v){return new Vector2D(this.x+v.x,this.y+v.y)}),
+  sub:acceptsvector(function(v){return new Vector2D(this.x-v.x,this.y-v.y)}),
+  dot:acceptsvector(function(v){return this.x*v.x+this.y*v.y}),
   mul:function(s){return new Vector2D(this.x*s,this.y*s)},
   length:function(){return Math.sqrt(this.x*this.x+this.y*this.y)},
   argument:function(){return Math.atan2(this.y,this.x)},
@@ -104,13 +109,34 @@ _.extend(Vector2D.prototype,{
     return r
   }
 });
-Vector2D.prototype.scale=Vector2D.prototype.mul
-Vector2D.prototype.direction=Vector2D.prototype.argument
-Vector2D.prototype.dir=Vector2D.prototype.argument
-Vector2D.prototype.ren=Vector2D.prototype.rename
+
+// method aliases
+_.each([
+  ['scale','mul'],
+  ['direction','argument'],
+  ['dir','argument'],
+  ['ren','rename']
+],function(p){Vector2D.prototype[p[0]]=Vector2D.prototype[p[1]]});
+
 
 var MINARCSPAN=Math.PI/4;
 
+// basic bezier arc from point to point with a given angular span
+// aspan=0 gets straight line
+// aspan>0 arc curves in positive direction
+// aspan<0 arc curves in negative direction
+// all ther modes of arcs are coerced to this case
+// from and to are 2d vectors, aspan is in radians
+function arcBezier0(from,to,aspan,minspan) {
+    var v=to.sub(options.from).mul(1/(3*Math.pow(Math.cos(aspan/4),2)))
+    return [
+      [from,from.add(v.rotate(-aspan/2)),to.sub(v.rotate(aspan/2)),to]
+    ]
+}
+
+// return array of 4-pt arrays, each array being complete bezier segment
+// it is up to a caller to chain them together into a valid path commands
+//
 // options -- any sufficient combination of
 // cx cy -- center
 // center -- center V2D
@@ -133,19 +159,24 @@ var MINARCSPAN=Math.PI/4;
 function arcBezier(options)
 {
   // have: from to aspan
-  var from,to
-  if( _.has(options,'from') ) { from=new Vector2D(options.from) }
-  if( _.has(options,'to') ) { to=new Vector2D(options.to) }
+  var ho=function(opt) { return _.has(options,opt) }
+  if( ho('from') ) { options.from=new Vector2D(options.from) }
+  if( ho('to') ) { options.to=new Vector2D(options.to) }
+  // angular options without suffix -d have priority if conflict
   _.each(['a1','a2','aspan','minspan'],function(name){
-    if( _.has(options,name+'d') && !_.has(options,name) )
+    if( ho(name+'d') && !ho(name) )
       options[name]=rfd(options[name+'d'])
   })
-  if(!_.has(options,'aspan') && _.has(options,'a1') && _.has(options,'a2')) {
+  if(!ho('aspan') && ho('a1') && ho('a2')) {
     options.aspan=options.a2-options.a1
   }
   _.defaults(options,{minspan:MINARCSPAN})
   var aspan=options.aspan
-  if( !_.has(options,'from') || !_.has(options,'to') ) {
+  // alternative center specification (if conflicts, center is priority)
+  if( ho('cx') && ho('cy') && !ho('center') ) options.center=new Vector2D(options.cx,options.cy);
+
+  // mode 0: center, radius, start angle, end angle
+  if( ho('center') && ( !ho('from') || !ho('to')) ) {
     var c=new Vector2D(options.center);
     options.from=c.add(new Vector2D(options.r).rotate(options.a1))
     options.to  =c.add(new Vector2D(options.r).rotate(options.a2))
@@ -156,7 +187,22 @@ function arcBezier(options)
   } else if(_.has(options,'center')) {
     var o={center:options.center,r:options.r,a1:options.a1,a2:options.a2}
     return arcBezier(_.extend({},o,{a2:options.a1+aspan/2})).concat(arcBezier(_.extend({},o,{a1:options.a2-aspan/2})))
-  } else console.assert(false, 'Not implemented branch of arcBezier');
+  } else {
+    var o={from:options.from,to:options.to,aspan:aspan/2}
+    // height of an circular segment is |to-from|*tan(aspan/4)
+    // midpoint is from+(to-from)/2+rot(90,to-from)*tan(aspan/4)
+    // when aspan is negative, its tan is also negative
+    var mid=options.to.sub(options.from).rotate($v.rfd(-90)).mul(0.5*Math.tan(aspan/4));
+    mid=options.to.add(options.from).mul(0.5).add(mid)
+    return arcBezier(_.extend({},o,{to:mid})).concat(arcBezier(_.extend({},o,{from:mid})))
+    
+  }
+  // TODO: detect other insufficient cases
+  // console.assert(false, 'Not implemented branch of arcBezier');
+  // TODO: parse other possible cases and convert them to c,r,a1,a2 or
+  // from,to,aspan
+  // TODO: c,from,aspan  c,to,aspan  c,from,a2  c,to,a1
+  // TODO: tangents: from,r,toward (toward cannot be inside the circle
 }
 
 // pos can be 0 or -1
@@ -183,11 +229,16 @@ function pathString(arr) {
   },'')
 }
   _.extend(planeLib,{
-    normalize:normalize
+    // TODO:change name, "normalize" is not descriptive
+    normalize:acceptsvector
+    //,acceptsvector:acceptsvector
     ,path:pathString
     ,string:pathString
     ,rfd:rfd
     ,dfr:dfr
+
+    // $v.arcpath('M',{arcoptions}) for first
+    // $v.arcpath({arcoptions}) for rest
     ,arcpath:function(initial,arcoptions) {
       // join complete bezier segments possibly including intial element
       var r=[]
