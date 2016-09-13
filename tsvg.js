@@ -28,6 +28,9 @@
     // fill attributes
     _.each(a2,function(v,k){
       //console.log('k=',k,'v=',v)
+      // arrays are assumed list of tokens and are unfolded to strings
+      if( _.isArray(v) ) v=pathString(v)
+      // assignment
       if('href'==k) tag.setAttributeNS(XLINKNS, "href", v);
       else if( 'xlink:'==k.substr(0,6) ) tag.setAttributeNS(XLINKNS, k.substr(6), v);
       else tag.setAttribute(k,v)
@@ -61,9 +64,11 @@ function Vector2D(x,y)
     this.x=x[0]
     this.y=x[1]
   } else {
-    this.x=x || 0
-    this.y=y || 0
+    this.x=x
+    this.y=y
   }
+  this.x=parseFloat(this.x)||0
+  this.y=parseFloat(this.y)||0
 }
 
 // f is a function which takes Vector2D argument
@@ -142,9 +147,9 @@ function arcBezier0(from,to,aspan,minspan) {
 // center -- center V2D
 // r -- radius
 // from to -- start and end of an arc, V2D
-// afrom ato -- angular start/end
+// a1 a2 -- angular start/end
 // aspan -- angular extent of an arc
-// afromd atod aspand -- same in degrees
+// a1d a2d aspand -- same in degrees
 // return array of 4-pt arrays, each array being complete bezier segment
 // center,r,a1,a2
 // center,from,a2
@@ -218,7 +223,8 @@ function roundnumber(n)
 }
 
 function pathString(arr) {
-  return _.foldl(arr,function(path,item){
+  if( 1!=arguments.length ) return pathString(_.toArray(arguments))
+  else return _.foldl(arr,function(path,item){
 
     if( _.isNumber(item) ) item=roundnumber(item)
     else if( !_.isObject(item) ) item=item.toString()
