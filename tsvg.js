@@ -227,8 +227,9 @@ function pathString(arr) {
   else return _.foldl(arr,function(path,item){
 
     if( _.isNumber(item) ) item=roundnumber(item)
-    else if( !_.isObject(item) ) item=item.toString()
+    else if( _.isUndefined(item) ) item=''
     else if( _.isArray(item) ) item=pathString(item)
+    else if( !_.isObject(item) ) item=item.toString()
     else if( _.has(item,'x') && _.has(item,'y') ) item=roundnumber(item.x)+' '+roundnumber(item.y)
 
     return path+((isdigitat(path,-1) && isdigitat(item,0))?' ':'')+item
