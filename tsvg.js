@@ -32,7 +32,8 @@
       if( _.isArray(v) ) v=pathString(v)
       // assignment
       if('href'==k) tag.setAttributeNS(XLINKNS, "href", v);
-      else if( 'xlink:'==k.substr(0,6) ) tag.setAttributeNS(XLINKNS, k.substr(6), v);
+      else if( 'xlink:'===k.substr(0,6) ) tag.setAttributeNS(XLINKNS, k.substr(6), v);
+      else if( 'on'===k.substr(0,2) && _.isFunction(v) ) tag.addEventListener(k.substr(2),v)
       else tag.setAttribute(k,v)
     })
     for( var i=2; i<arguments.length; ++i ) {
@@ -55,7 +56,7 @@
 
 // can be initialized with another 2D vector, 2 element array or explicit x and
 // y coordinates
-function Vector2D(x,y)
+var Vector2D=function V2D(x,y)
 {
   if( _.has(x,'x') && _.has(x,'y') ) {
     this.x=x.x
@@ -91,10 +92,11 @@ function dfr(rad){return rad*RFD}
 function rfd(deg){return deg/RFD}
 
 _.extend(Vector2D.prototype,{
+  toString:function(){return '$v('+this.x+','+this.y+')'},
   add:acceptsvector(function(v){return new Vector2D(this.x+v.x,this.y+v.y)}),
   sub:acceptsvector(function(v){return new Vector2D(this.x-v.x,this.y-v.y)}),
   dot:acceptsvector(function(v){return this.x*v.x+this.y*v.y}),
-  mul:function(s){return new Vector2D(this.x*s,this.y*s)},
+  mul:function(s,sy=s){return new Vector2D(this.x*s,this.y*sy)},
   length:function(){return Math.sqrt(this.x*this.x+this.y*this.y)},
   argument:function(){return Math.atan2(this.y,this.x)},
   rotate:function(a){
@@ -262,6 +264,16 @@ function pathString(arr) {
         // r.push('S',seg.slice(2)) // shortcut because symmetric, sometimes not right
       })
       return r
+    }
+    // apply trns to all 2d-vertex-like elements of list at all depths
+    // undefined trns means no tranform (identity)
+    ,transform:function(list,trns) {
+      if(!trns) return list
+      if( _.isArray(list) && list.length==2 && _.isNumber(list[0]) && _.isNumber(list[1])) return trns(makePoint(list[0],list[1]))
+
+      if( _.isObject(list) && _.has(list,'x') && _.has(list,'y')) return trns(makePoint(list.x,list.y))
+      if( _.isArray(list) ) return list.map(el=>planeLib.transform(el,trns))
+      return list
     }
     ,polar:function(r,phi) {
       return new Vector2D(r*Math.cos(phi),r*Math.sin(phi))
