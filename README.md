@@ -23,7 +23,7 @@ Description
 
 Library creates a global `$v` which provides single entry point intferace for both element and 2D vector manipulation.
 
-###SVG elements creation
+### SVG elements creation
 
 ```
 var svg_el=$v('tag'[,{attributes},child1,child2,...])
@@ -38,7 +38,7 @@ var svg_el=$v(svgelement,{attributes}[,child1,child2,...])
 Modfies/adds attributes for an existing element.
 
 
-###2D vectors creation and manipulation
+### 2D vectors creation and manipulation
 
 ```
 $v(n1,n2) -- $v.Vector2D
