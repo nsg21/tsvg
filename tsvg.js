@@ -246,8 +246,10 @@ function pathString(arr) {
     ,rfd:rfd
     ,dfr:dfr
 
-    // $v.arcpath('M',{arcoptions}) for first
-    // $v.arcpath({arcoptions}) for rest
+    // $v.arcpath('M',{arcoptions}) for first: includes starting point of an
+    //          arc in the resulting path with a given prefix ('M' or 'L')
+    // $v.arcpath({arcoptions}) for rest: does not include intial point of the
+    //          arc, resulting path starts with 'C' ...
     ,arcpath:function(initial,arcoptions) {
       // join complete bezier segments possibly including intial element
       var r=[]
@@ -279,6 +281,7 @@ function pathString(arr) {
       return new Vector2D(r*Math.cos(phi),r*Math.sin(phi))
     }
   })
+  planeLib.Vector2D=Vector2D
   global.planeLib=planeLib
   global.$v=planeLib
 })(this)
