@@ -4,72 +4,59 @@
   // a) generates a 2d vector
   // b) generates or updates SVG element
   var XLINKNS="http://www.w3.org/1999/xlink"
-  function planeLib(a1,a2) {
-    if(1==arguments.length ) {
-      if( _.isArray(a1) && 2==a1.length) {
-        return makePoint(a1[0],a1[1])
-      } else if( _.isObject(a1) && _.has(a1,'x') && _.has(a1,'y') ) {
-        return makePoint(a1.x,a1.y)
-      } else {
-        return planeLib(a1,{})
-      }
-    } else if( 2==arguments.length && !_.isObject(a1) && !_.isObject(a2) ) {
-      return makePoint(a1,a2)
-    }
+  var has=(obj,prop)=>obj.hasOwnProperty(prop) // or (prop in obj) for inherited
+  var isNumber=v=>'number'===typeof v
+  var isObject=v=>'object'==typeof v &&!!v
+  var isPtArray=a=>Array.isArray(a) && 2==a.length && isNumber(a[0]) && isNumber(a[1])
+  var isPtObj=a=>'object'===typeof a && has(a,'x') && has(a,'y')
+  function planeLib(...args) {
+    var pt
+    if( pt=tryPoint(args) ?? tryPoint(args[0]) ) return pt
+    var a1=args[0]
     var tag
-    if( _.isString(a1) ) {
+    if( 'string'===typeof a1 ) {
       tag=document.createElementNS('http://www.w3.org/2000/svg',a1);
       if( 'svg'===a1 ) {
         tag.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINKNS);
       }
-    } else if( _.isObject(a1) ) {
+    } else if( isObject(a1) ) {
       tag=a1
     }
     // fill attributes
-    _.each(a2,function(v,k){
+    Object.entries(args[1]).forEach(([k,v])=>{
       //console.log('k=',k,'v=',v)
       // arrays are assumed list of tokens and are unfolded to strings
-      if( _.isArray(v) ) v=pathString(v)
+      if( Array.isArray(v) ) v=pathString(v)
       // assignment
       if('href'==k) tag.setAttributeNS(XLINKNS, "href", v);
       else if( 'xlink:'===k.substr(0,6) ) tag.setAttributeNS(XLINKNS, k.substr(6), v);
-      else if( 'on'===k.substr(0,2) && _.isFunction(v) ) tag.addEventListener(k.substr(2),v)
+      else if( 'on'===k.substr(0,2) && 'function'===typeof v ) tag.addEventListener(k.substr(2),v)
       else tag.setAttribute(k,v)
     })
-    for( var i=2; i<arguments.length; ++i ) {
-      // console.log(i,'-th:',typeof(arguments[i]))
-      if( _.isArray(arguments[i] ) ) {
-        arguments.callee.apply(this,[tag,{}].concat(arguments[i]))
-      } else if( !_.isObject(arguments[i])) {
-        if( !_.isUndefined(arguments[i]) )
-          tag.appendChild(document.createTextNode(arguments[i]))
+    args.slice(2).forEach((arg,i)=>{
+      // console.log(i,'-th:',typeof(arg))
+      if( Array.isArray(arg) ) {
+        planeLib.apply(this,[tag,{},...arg])
+      } else if( !isObject(arg)) {
+        if( 'undefined'!==typeof arg)
+          tag.appendChild(document.createTextNode(arg))
       } else {
-        tag.appendChild(arguments[i])
+        tag.appendChild(arg)
       }
-    }
+    })
     return tag
   }
 
-  function makePoint(x,y) {
-    return new Vector2D(x,y)
+  function tryPoint(pt) {
+    if(isPtArray(pt)) return new Vector2D(pt[0],pt[1])
+    if(isPtObj(pt)) return new Vector2D(pt.x,pt.y)
+    if(isObject(pt) && has(pt,'r') && has(pt,'phi') ) return planeLib.polar(pt.r,pt.phi)
+    return null
   }
 
-// can be initialized with another 2D vector, 2 element array or explicit x and
-// y coordinates
-var Vector2D=function V2D(x,y)
-{
-  if( _.has(x,'x') && _.has(x,'y') ) {
-    this.x=x.x
-    this.y=x.y
-  } else if( _.isArray(x) && 2==x.length ) {
-    this.x=x[0]
-    this.y=x[1]
-  } else {
-    this.x=x
-    this.y=y
-  }
-  this.x=parseFloat(this.x)||0
-  this.y=parseFloat(this.y)||0
+var Vector2D=function V2D(x,y) {
+  this.x=parseFloat(x)||0
+  this.y=parseFloat(y)||0
 }
 
 // f is a function which takes Vector2D argument
@@ -77,13 +64,10 @@ var Vector2D=function V2D(x,y)
 // it onto f
 function acceptsvector(f)
 {
-  return function(arg,argopt) {
-  if( 1==arguments.length ) {
-    if( _.isArray(arg) ) return f.call(this,new Vector2D(arg[0],arg[1]))
-    else if( _.isObject(arg) ) return f.call(this,arg) 
-  } else
-  if( 2==arguments.length && !_.isObject(arg) && !_.isObject(argopt) ) return f.call(this,new Vector2D(arg,argopt))
-  throw new Error(arguments.length+" arguments, possibly wrong type")
+  return function(...args) {
+    var pt
+    if( pt=tryPoint(args) ?? tryPoint(args[0]) ) return f.call(this,pt)
+    throw new Error(args.length+" arguments, possibly wrong type")
   }
 }
 
@@ -91,7 +75,7 @@ var RFD=180/Math.PI;
 function dfr(rad){return rad*RFD}
 function rfd(deg){return deg/RFD}
 
-_.extend(Vector2D.prototype,{
+Object.assign(Vector2D.prototype,{
   toString:function(){return '$v('+this.x+','+this.y+')'},
   add:acceptsvector(function(v){return new Vector2D(this.x+v.x,this.y+v.y)}),
   sub:acceptsvector(function(v){return new Vector2D(this.x-v.x,this.y-v.y)}),
@@ -108,7 +92,7 @@ _.extend(Vector2D.prototype,{
   rename:function(xname,yname) {
     if( 0==arguments.length ) return [this.x,this.y];
     if( 1==arguments.length )
-      if(_.isArray(xname) ) return this.rename.apply(this,xname)
+      if(Array.isArray(xname) ) return this.rename.apply(this,xname)
       else yname=xname.replace("x","y") // need "g"?
     var r={}
     r[xname]=this.x
@@ -118,12 +102,12 @@ _.extend(Vector2D.prototype,{
 });
 
 // method aliases
-_.each([
+[
   ['scale','mul'],
   ['direction','argument'],
   ['dir','argument'],
   ['ren','rename']
-],function(p){Vector2D.prototype[p[0]]=Vector2D.prototype[p[1]]});
+].forEach(p=>Vector2D.prototype[p[0]]=Vector2D.prototype[p[1]]);
 
 
 var MINARCSPAN=Math.PI/4;
@@ -166,34 +150,34 @@ function arcBezier0(from,to,aspan,minspan) {
 function arcBezier(options)
 {
   // have: from to aspan
-  var ho=function(opt) { return _.has(options,opt) }
-  if( ho('from') ) { options.from=new Vector2D(options.from) }
-  if( ho('to') ) { options.to=new Vector2D(options.to) }
+  var ho=opt=>has(options,opt)
+  if( ho('from') ) { options.from=tryPoint(options.from) }
+  if( ho('to') ) { options.to=tryPoint(options.to) }
   // angular options without suffix -d have priority if conflict
-  _.each(['a1','a2','aspan','minspan'],function(name){
+  ['a1','a2','aspan','minspan'].forEach(name=>{
     if( ho(name+'d') && !ho(name) )
       options[name]=rfd(options[name+'d'])
   })
   if(!ho('aspan') && ho('a1') && ho('a2')) {
     options.aspan=options.a2-options.a1
   }
-  _.defaults(options,{minspan:MINARCSPAN})
+  options={minspan:MINARCSPAN,...options}
   var aspan=options.aspan
   // alternative center specification (if conflicts, center is priority)
   if( ho('cx') && ho('cy') && !ho('center') ) options.center=new Vector2D(options.cx,options.cy);
 
   // mode 0: center, radius, start angle, end angle
   if( ho('center') && ( !ho('from') || !ho('to')) ) {
-    var c=new Vector2D(options.center);
-    options.from=c.add(new Vector2D(options.r).rotate(options.a1))
-    options.to  =c.add(new Vector2D(options.r).rotate(options.a2))
+    var c=tryPoint(options.center);
+    options.from=c.add(new Vector2D(options.r,0).rotate(options.a1))
+    options.to  =c.add(new Vector2D(options.r,0).rotate(options.a2))
   }
   if( Math.abs(aspan)<=options.minspan ) {
     var v=options.to.sub(options.from).mul(1/(3*Math.pow(Math.cos(aspan/4),2)))
     return [[options.from,options.from.add(v.rotate(-aspan/2)),options.to.sub(v.rotate(aspan/2)),options.to]]
-  } else if(_.has(options,'center')) {
+  } else if(ho('center')) {
     var o={center:options.center,r:options.r,a1:options.a1,a2:options.a2}
-    return arcBezier(_.extend({},o,{a2:options.a1+aspan/2})).concat(arcBezier(_.extend({},o,{a1:options.a2-aspan/2})))
+    return arcBezier({...o,a2:options.a1+aspan/2}).concat(arcBezier({...o,a1:options.a2-aspan/2}))
   } else {
     var o={from:options.from,to:options.to,aspan:aspan/2}
     // height of an circular segment is |to-from|*tan(aspan/4)
@@ -201,7 +185,7 @@ function arcBezier(options)
     // when aspan is negative, its tan is also negative
     var mid=options.to.sub(options.from).rotate($v.rfd(-90)).mul(0.5*Math.tan(aspan/4));
     mid=options.to.add(options.from).mul(0.5).add(mid)
-    return arcBezier(_.extend({},o,{to:mid})).concat(arcBezier(_.extend({},o,{from:mid})))
+    return arcBezier({...o,to:mid}).concat(arcBezier({...o,from:mid}))
     
   }
   // TODO: detect other insufficient cases
@@ -225,19 +209,20 @@ function roundnumber(n)
 }
 
 function pathString(arr) {
-  if( 1!=arguments.length ) return pathString(_.toArray(arguments))
-  else return _.foldl(arr,function(path,item){
+  if( 1!=arguments.length ) return pathString(Array.from(arguments))
+  else return arr.reduce((path,item)=>{
 
-    if( _.isNumber(item) ) item=roundnumber(item)
-    else if( _.isUndefined(item) ) item=''
-    else if( _.isArray(item) ) item=pathString(item)
-    else if( !_.isObject(item) ) item=item.toString()
-    else if( _.has(item,'x') && _.has(item,'y') ) item=roundnumber(item.x)+' '+roundnumber(item.y)
+    if( isNumber(item) ) item=roundnumber(item)
+    else if( !item ) item=''
+    else if( Array.isArray(item) ) item=pathString(item)
+    else if( !isObject(item) ) item=item.toString()
+    else if( has(item,'x') && has(item,'y') ) item=roundnumber(item.x)+' '+roundnumber(item.y)
 
     return path+((isdigitat(path,-1) && isdigitat(item,0))?' ':'')+item
   },'')
 }
-  _.extend(planeLib,{
+
+  Object.assign(planeLib,{
     // TODO:change name, "normalize" is not descriptive
     normalize:acceptsvector
     //,acceptsvector:acceptsvector
@@ -245,6 +230,7 @@ function pathString(arr) {
     ,string:pathString
     ,rfd:rfd
     ,dfr:dfr
+    ,tryPoint:tryPoint
 
     // $v.arcpath('M',{arcoptions}) for first: includes starting point of an
     //          arc in the resulting path with a given prefix ('M' or 'L')
@@ -255,26 +241,22 @@ function pathString(arr) {
       var r=[]
       var segments
       var options
-      if( _.isString(initial) ) {
+      if( 'string'===typeof initial ) {
         segments=arcBezier(arcoptions)
         r.push(initial,segments[0][0])
-      } else if( _.isObject(initial) && 1==arguments.length ) {
+      } else if( isObject(initial) && 1==arguments.length ) {
         segments=arcBezier(initial)
       } else return;
-      _.each(segments,function(seg) {
-        r.push('C',seg.slice(1)) // full segment definition
-        // r.push('S',seg.slice(2)) // shortcut because symmetric, sometimes not right
-      })
+      segments.forEach(seg=>r.push('C',seg.slice(1))) // full segment definition
       return r
     }
     // apply trns to all 2d-vertex-like elements of list at all depths
     // undefined trns means no tranform (identity)
     ,transform:function(list,trns) {
       if(!trns) return list
-      if( _.isArray(list) && list.length==2 && _.isNumber(list[0]) && _.isNumber(list[1])) return trns(makePoint(list[0],list[1]))
-
-      if( _.isObject(list) && _.has(list,'x') && _.has(list,'y')) return trns(makePoint(list.x,list.y))
-      if( _.isArray(list) ) return list.map(el=>planeLib.transform(el,trns))
+      var pt
+      if(pt=tryPoint(list)) return trns(pt)
+      if( Array.isArray(list) ) return list.map(el=>planeLib.transform(el,trns))
       return list
     }
     ,polar:function(r,phi) {
@@ -285,4 +267,3 @@ function pathString(arr) {
   global.planeLib=planeLib
   global.$v=planeLib
 })(this)
-
