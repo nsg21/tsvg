@@ -9,10 +9,9 @@ SVG's `<path>` element.
 Installation
 ------------
 
-`tsvg.js` depends on `underscore.js`. Include lines
+Include line
 
 ```javascript
-<script src="path_to_underscore/underscore-min.js"></script>
 <script src="path_to_tsvg/tsvg.min.js"></script>
 ```
 
@@ -35,7 +34,7 @@ Creates element 'tag' in svg namespace, fills out attributes from an object and 
 var svg_el=$v(svgelement,{attributes}[,child1,child2,...])
 ```
 
-Modfies/adds attributes for an existing element.
+Modifies/adds attributes for an existing element.
 
 ### 2D vectors creation and manipulation
 
@@ -44,6 +43,7 @@ Create 2d vector:
 $v(n1,n2)
 $v([n1,n2])
 $v({x:n1,y:n2}) 
+$v({r:radius,phi:angle}) 
 ```
 
 Vector operations:
@@ -82,6 +82,11 @@ When SVG element is created with an attribute where value is a list, this list i
 $v.arcpath('M',{arcoptions})
 $v.arcpath({arcoptions})
 ```
+
+### Path transformation
+
+function `$v.transform(list_path,trns_lambda)` applies trns_lambda to all vectors and vector-like objects in the list_path and all its component list-pathes recursively. It leaves all numbers which are not included in vector-like objects and strings untouched. trns_lambda takes a single vector parameter and must return a vector.
+
 Example
 -------
 
