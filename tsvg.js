@@ -50,7 +50,7 @@
   function tryPoint(pt) {
     if(isPtArray(pt)) return new Vector2D(pt[0],pt[1])
     if(isPtObj(pt)) return new Vector2D(pt.x,pt.y)
-    if(isObject(pt) && has(pt,'r') && has(pt,'phi') ) return planeLib.polar(pt.r,pt.phi)
+    if(isObject(pt) && has(pt,'r') && has(pt,'phi') ) return polar(pt.r,pt.phi)
     return null
   }
 
@@ -59,21 +59,20 @@ var Vector2D=function V2D(x,y) {
   this.y=parseFloat(y)||0
 }
 
+var polar=(r,phi)=>new Vector2D(r*Math.cos(phi),r*Math.sin(phi))
+
 // f is a function which takes Vector2D argument
 // this operator converts 1 object, 1 array or 2 numbers to Vector2D and passes
 // it onto f
-function acceptsvector(f)
-{
-  return function(...args) {
-    var pt
-    if( pt=tryPoint(args) ?? tryPoint(args[0]) ) return f.call(this,pt)
-    throw new Error(args.length+" arguments, possibly wrong type")
-  }
+var acceptsvector=(f)=>function(...args) {
+  var pt
+  if( pt=tryPoint(args) ?? tryPoint(args[0]) ) return f.call(this,pt)
+  throw new Error(args.length+" arguments, possibly wrong type")
 }
 
 var RFD=180/Math.PI;
-function dfr(rad){return rad*RFD}
-function rfd(deg){return deg/RFD}
+var dfr=(rad)=>rad*RFD
+var rfd=(deg)=>deg/RFD
 
 Object.assign(Vector2D.prototype,{
   toString:function(){return '$v('+this.x+','+this.y+')'},
@@ -83,6 +82,9 @@ Object.assign(Vector2D.prototype,{
   mul:function(s,sy=s){return new Vector2D(this.x*s,this.y*sy)},
   length:function(){return Math.sqrt(this.x*this.x+this.y*this.y)},
   argument:function(){return Math.atan2(this.y,this.x)},
+  rotated:function(ad){
+    return this.rotate(rfd(ad))
+  },
   rotate:function(a){
   // positive direction is clockwise because Y axis is downward
     var ca=Math.cos(a)
@@ -110,7 +112,10 @@ Object.assign(Vector2D.prototype,{
 ].forEach(p=>Vector2D.prototype[p[0]]=Vector2D.prototype[p[1]]);
 
 
-var MINARCSPAN=Math.PI/4;
+var MINARCSPAN=Math.PI/4 // length of arc that can be approximated with a single bezier spline; anything larger than this will be split into multiple splines.
+var MODULO=1000 // round coordinates in path strings to 1/MODULO;
+
+var D90=Math.PI/2
 
 // basic bezier arc from point to point with a given angular span
 // aspan=0 gets straight line
@@ -118,11 +123,29 @@ var MINARCSPAN=Math.PI/4;
 // aspan<0 arc curves in negative direction
 // all ther modes of arcs are coerced to this case
 // from and to are 2d vectors, aspan is in radians
-function arcBezier0(from,to,aspan,minspan) {
-    var v=to.sub(options.from).mul(1/(3*Math.pow(Math.cos(aspan/4),2)))
+function arcBezier0(from,to,aspan) {
+    var v=to.sub(from).mul(1/(3*Math.pow(Math.cos(aspan/4),2)))
     return [
       [from,from.add(v.rotate(-aspan/2)),to.sub(v.rotate(aspan/2)),to]
     ]
+}
+// subdivide large arcs into smaller arcs
+function arcBezier1(from,to,aspan){
+    if( Math.abs(aspan)<=MINARCSPAN ) return arcBezier0(from,to,aspan)
+    // height of an circular segment is |to-from|*tan(aspan/4)
+    // when aspan is negative, its tan is also negative
+    var mid=to.sub(from).rotate(-D90).mul(0.5*Math.tan(aspan/4));
+    mid=to.add(from).mul(0.5).add(mid)
+    aspan/=2
+    return arcBezier1(from,mid,aspan).concat(arcBezier1(mid,to,aspan))
+}
+
+function arcBezier2(c,r,a1,aspan)
+{
+    if(Math.abs(aspan)<MINARCSPAN ) return arcBezier0(c.add(polar(r,a1)),c.add(polar(r,a1+aspan)),aspan)
+    var a2=aspan/2
+    return arcBezier2(c,r,a1,a2).concat(arcBezier2(c,r,a1+a2,a2))
+
 }
 
 // return array of 4-pt arrays, each array being complete bezier segment
@@ -151,43 +174,31 @@ function arcBezier(options)
 {
   // have: from to aspan
   var ho=opt=>has(options,opt)
-  if( ho('from') ) { options.from=tryPoint(options.from) }
-  if( ho('to') ) { options.to=tryPoint(options.to) }
+  var from,to
+  if( ho('from') ) { from=tryPoint(options.from) }
+  if( ho('to') ) { to=tryPoint(options.to) }
   // angular options without suffix -d have priority if conflict
-  ['a1','a2','aspan','minspan'].forEach(name=>{
+  ;['a1','a2','aspan'].forEach(name=>{
     if( ho(name+'d') && !ho(name) )
       options[name]=rfd(options[name+'d'])
   })
-  if(!ho('aspan') && ho('a1') && ho('a2')) {
-    options.aspan=options.a2-options.a1
-  }
-  options={minspan:MINARCSPAN,...options}
-  var aspan=options.aspan
   // alternative center specification (if conflicts, center is priority)
-  if( ho('cx') && ho('cy') && !ho('center') ) options.center=new Vector2D(options.cx,options.cy);
 
-  // mode 0: center, radius, start angle, end angle
-  if( ho('center') && ( !ho('from') || !ho('to')) ) {
-    var c=tryPoint(options.center);
-    options.from=c.add(new Vector2D(options.r,0).rotate(options.a1))
-    options.to  =c.add(new Vector2D(options.r,0).rotate(options.a2))
+  var aspan=options.aspan
+  if( !ho('from') || !ho('to') ) {
+    // mode 0: center, radius, start angle, end angle
+    var c
+    if( ho('center') ) c=tryPoint(options.center)
+    else if( ho('cx') && ho('cy') ) c=new Vector2D(options.cx,options.cy);
+    else c=new Vector2D(0,0)
+    var a1=options.a1??0
+    var a2=options.a2??Math.PI*2
+    aspan=a2-a1
+    var r=options.r??1
+    return arcBezier2(c,r,a1,aspan)
   }
-  if( Math.abs(aspan)<=options.minspan ) {
-    var v=options.to.sub(options.from).mul(1/(3*Math.pow(Math.cos(aspan/4),2)))
-    return [[options.from,options.from.add(v.rotate(-aspan/2)),options.to.sub(v.rotate(aspan/2)),options.to]]
-  } else if(ho('center')) {
-    var o={center:options.center,r:options.r,a1:options.a1,a2:options.a2}
-    return arcBezier({...o,a2:options.a1+aspan/2}).concat(arcBezier({...o,a1:options.a2-aspan/2}))
-  } else {
-    var o={from:options.from,to:options.to,aspan:aspan/2}
-    // height of an circular segment is |to-from|*tan(aspan/4)
-    // midpoint is from+(to-from)/2+rot(90,to-from)*tan(aspan/4)
-    // when aspan is negative, its tan is also negative
-    var mid=options.to.sub(options.from).rotate($v.rfd(-90)).mul(0.5*Math.tan(aspan/4));
-    mid=options.to.add(options.from).mul(0.5).add(mid)
-    return arcBezier({...o,to:mid}).concat(arcBezier({...o,from:mid}))
-    
-  }
+  return arcBezier1(from,to,aspan)
+
   // TODO: detect other insufficient cases
   // console.assert(false, 'Not implemented branch of arcBezier');
   // TODO: parse other possible cases and convert them to c,r,a1,a2 or
@@ -201,7 +212,6 @@ function isdigitat(str,pos) {
   return str.length>0 && 0<="0123456789".indexOf(str.substr(pos,1))
 }
 
-var MODULO=1000
 function roundnumber(n)
 {
   n=parseFloat(n)
@@ -231,19 +241,20 @@ function pathString(arr) {
     ,rfd:rfd
     ,dfr:dfr
     ,tryPoint:tryPoint
+    ,polar:polar
 
     // $v.arcpath('M',{arcoptions}) for first: includes starting point of an
     //          arc in the resulting path with a given prefix ('M' or 'L')
     // $v.arcpath({arcoptions}) for rest: does not include intial point of the
     //          arc, resulting path starts with 'C' ...
+    // empty initial ('') works same as no initial
     ,arcpath:function(initial,arcoptions) {
       // join complete bezier segments possibly including intial element
       var r=[]
       var segments
-      var options
       if( 'string'===typeof initial ) {
         segments=arcBezier(arcoptions)
-        r.push(initial,segments[0][0])
+        if( initial ) r.push(initial,segments[0][0])
       } else if( isObject(initial) && 1==arguments.length ) {
         segments=arcBezier(initial)
       } else return;
@@ -258,9 +269,6 @@ function pathString(arr) {
       if(pt=tryPoint(list)) return trns(pt)
       if( Array.isArray(list) ) return list.map(el=>planeLib.transform(el,trns))
       return list
-    }
-    ,polar:function(r,phi) {
-      return new Vector2D(r*Math.cos(phi),r*Math.sin(phi))
     }
   })
   planeLib.Vector2D=Vector2D
