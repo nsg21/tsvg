@@ -48,6 +48,7 @@
   }
 
   function tryPoint(pt) {
+    if(pt===null) return null
     if(isPtArray(pt)) return new Vector2D(pt[0],pt[1])
     if(isPtObj(pt)) return new Vector2D(pt.x,pt.y)
     if(isObject(pt) && has(pt,'r') && has(pt,'phi') ) return polar(pt.r,pt.phi)
